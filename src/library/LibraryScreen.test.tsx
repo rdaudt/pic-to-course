@@ -1,6 +1,6 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { appendPage, createEbook, db } from '../db/database';
 import { LibraryScreen } from './LibraryScreen';
 
@@ -11,7 +11,27 @@ const asset = () => ({
   height: 900,
 });
 
+const showModal = vi.fn(function (this: HTMLDialogElement) {
+  this.open = true;
+});
+const closeModal = vi.fn(function (this: HTMLDialogElement) {
+  this.open = false;
+});
+const originalShowModal = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'showModal');
+const originalCloseModal = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'close');
+
 describe('LibraryScreen', () => {
+  beforeAll(() => {
+    Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
+      configurable: true,
+      value: showModal,
+    });
+    Object.defineProperty(HTMLDialogElement.prototype, 'close', {
+      configurable: true,
+      value: closeModal,
+    });
+  });
+
   beforeEach(async () => {
     await db.delete();
     await db.open();
@@ -19,10 +39,42 @@ describe('LibraryScreen', () => {
       createObjectURL: vi.fn(() => 'blob:cover'),
       revokeObjectURL: vi.fn(),
     });
+    showModal.mockClear();
+    closeModal.mockClear();
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  afterAll(() => {
+    if (originalShowModal) {
+      Object.defineProperty(HTMLDialogElement.prototype, 'showModal', originalShowModal);
+    } else {
+      delete (HTMLDialogElement.prototype as Partial<HTMLDialogElement>).showModal;
+    }
+    if (originalCloseModal) {
+      Object.defineProperty(HTMLDialogElement.prototype, 'close', originalCloseModal);
+    } else {
+      delete (HTMLDialogElement.prototype as Partial<HTMLDialogElement>).close;
+    }
+  });
+
+  it('opens a native modal, focuses its field, dismisses on Escape, and returns focus', async () => {
+    const user = userEvent.setup();
+    render(<LibraryScreen onOpen={vi.fn()} />);
+    const trigger = screen.getByRole('button', { name: 'New ebook' });
+
+    await user.click(trigger);
+    const dialog = screen.getByRole('dialog', { name: 'Create ebook' });
+    expect(showModal).toHaveBeenCalledWith();
+    expect(within(dialog).getByLabelText('Title')).toHaveFocus();
+
+    fireEvent(dialog, new Event('cancel', { cancelable: true }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Create ebook' })).toBeNull());
+    expect(trigger).toHaveFocus();
   });
 
   it('requires a trimmed title before creating and opening an ebook', async () => {
@@ -84,6 +136,41 @@ describe('LibraryScreen', () => {
     resolvePage(page);
 
     await waitFor(() => expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:cover'));
+  });
+
+  it('keeps the current cover URL until a refreshed cover is ready', async () => {
+    const ebook = await createEbook('Refreshing');
+    const page = await appendPage(ebook.id, asset());
+    const createObjectURL = URL.createObjectURL as ReturnType<typeof vi.fn>;
+    let coverNumber = 0;
+    createObjectURL.mockImplementation(() => `blob:cover-${++coverNumber}`);
+
+    let resolveRefreshedPage: (value: typeof page) => void = () => undefined;
+    const refreshedPage = new Promise<typeof page>((resolve) => {
+      resolveRefreshedPage = resolve;
+    });
+    vi.spyOn(db.pages, 'get')
+      .mockResolvedValueOnce(page)
+      .mockResolvedValueOnce(refreshedPage as never);
+
+    const user = userEvent.setup();
+    render(<LibraryScreen onOpen={vi.fn()} />);
+    expect((await screen.findByRole('img', { name: 'Cover for Refreshing' })).getAttribute('src')).toBe(
+      'blob:cover-1',
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Rename Refreshing' }));
+    const dialog = screen.getByRole('dialog', { name: 'Rename ebook' });
+    await user.clear(within(dialog).getByLabelText('Title'));
+    await user.type(within(dialog).getByLabelText('Title'), 'Refreshed');
+    await user.click(within(dialog).getByRole('button', { name: 'Rename ebook' }));
+    await waitFor(() => expect(db.pages.get).toHaveBeenCalledTimes(2));
+
+    expect(URL.revokeObjectURL).not.toHaveBeenCalledWith('blob:cover-1');
+    resolveRefreshedPage(page);
+
+    await waitFor(() => expect(screen.getByRole('img', { name: 'Cover for Refreshed' })).toHaveAttribute('src', 'blob:cover-2'));
+    await waitFor(() => expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:cover-1'));
   });
 
   it('opens and renames an ebook with a valid trimmed title', async () => {
