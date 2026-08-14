@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { EditorScreen } from '../editor/EditorScreen';
 import { LibraryScreen } from '../library/LibraryScreen';
 
 export type Route =
@@ -14,12 +15,23 @@ export function App() {
     return <LibraryScreen onOpen={(ebookId) => setRoute({ screen: 'editor', ebookId })} />;
   }
 
+  if (route.screen === 'editor') {
+    return (
+      <EditorScreen
+        ebookId={route.ebookId}
+        onClose={() => setRoute({ screen: 'library' })}
+        onCapture={() => setRoute({ screen: 'camera', ebookId: route.ebookId })}
+        onExport={() => setRoute({ screen: 'export', ebookId: route.ebookId })}
+      />
+    );
+  }
+
   return (
     <main className="app">
-      <h1>{route.screen === 'editor' ? 'Ebook editor' : route.screen}</h1>
+      <h1>{route.screen}</h1>
       <p>This screen will be available in a later update.</p>
-      <button type="button" onClick={() => setRoute({ screen: 'library' })}>
-        Back to My ebooks
+      <button type="button" onClick={() => setRoute({ screen: 'editor', ebookId: route.ebookId })}>
+        Back to ebook editor
       </button>
     </main>
   );

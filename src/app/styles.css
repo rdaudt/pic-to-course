@@ -174,6 +174,83 @@ dialog {
   font-size: 1.125rem;
 }
 
+.editor-screen {
+  max-width: 80rem;
+  margin-inline: auto;
+}
+
+.editor-header,
+.editor-navigation,
+.page-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.editor-header {
+  justify-content: space-between;
+}
+
+.page-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 1rem;
+}
+
+.editor-page {
+  display: grid;
+  gap: 0.75rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 16px;
+  padding: 0.75rem;
+  background: #ffffff;
+}
+
+.thumbnail-viewport {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: 10px;
+  background: #e2e8f0;
+}
+
+.page-thumbnail {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transition: transform 160ms ease;
+}
+
+.page-card-actions {
+  align-items: stretch;
+}
+
+.page-card-actions button {
+  padding-inline: 16px;
+  font-size: 1rem;
+}
+
+.page-label {
+  display: grid;
+  align-content: center;
+  min-width: 5rem;
+}
+
+.page-label span {
+  color: #475569;
+}
+
+.drag-handle {
+  touch-action: none;
+  cursor: grab;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
 @media (orientation: landscape) {
   .app {
     padding-inline: clamp(3rem, 8vw, 8rem);
@@ -193,5 +270,10 @@ dialog {
 
   .library-header > button {
     width: 100%;
+  }
+
+  .editor-header {
+    display: grid;
+    align-items: stretch;
   }
 }
