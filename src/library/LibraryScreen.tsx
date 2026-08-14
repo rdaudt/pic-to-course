@@ -50,6 +50,8 @@ export function LibraryScreen({ onOpen }: LibraryScreenProps) {
   const deleteDialogRef = useRef<HTMLDialogElement>(null);
   const newEbookButtonRef = useRef<HTMLButtonElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
+  const renderedCoverUrlsRef = useRef<Set<string>>(new Set());
+  const pendingCoverUrlsRef = useRef<Set<string> | null>(null);
   const [shouldRestoreFocus, setShouldRestoreFocus] = useState(false);
 
   useNativeModal(createDialogRef, isCreateOpen);
@@ -73,6 +75,13 @@ export function LibraryScreen({ onOpen }: LibraryScreenProps) {
 
   useEffect(() => {
     let active = true;
+    const loadCoverUrls = new Set<string>();
+
+    const abandonedPendingUrls = pendingCoverUrlsRef.current;
+    if (abandonedPendingUrls) {
+      abandonedPendingUrls.forEach((url) => URL.revokeObjectURL(url));
+      pendingCoverUrlsRef.current = null;
+    }
 
     async function loadLibrary() {
       try {
@@ -86,7 +95,9 @@ export function LibraryScreen({ onOpen }: LibraryScreenProps) {
             if (!firstPage) return { ebook };
 
             const coverUrl = URL.createObjectURL(firstPage.thumbnailBlob);
+            loadCoverUrls.add(coverUrl);
             if (!active) {
+              loadCoverUrls.delete(coverUrl);
               URL.revokeObjectURL(coverUrl);
               return { ebook };
             }
@@ -95,10 +106,13 @@ export function LibraryScreen({ onOpen }: LibraryScreenProps) {
         );
 
         if (active) {
+          pendingCoverUrlsRef.current = loadCoverUrls;
           setItems(loaded);
           setLoadError('');
         }
       } catch {
+        loadCoverUrls.forEach((url) => URL.revokeObjectURL(url));
+        loadCoverUrls.clear();
         if (active) setLoadError('Your ebooks could not be loaded. Try reloading this app.');
       }
     }
@@ -106,16 +120,38 @@ export function LibraryScreen({ onOpen }: LibraryScreenProps) {
     void loadLibrary();
     return () => {
       active = false;
+      if (pendingCoverUrlsRef.current === loadCoverUrls) return;
+      loadCoverUrls.forEach((url) => {
+        if (!renderedCoverUrlsRef.current.has(url)) URL.revokeObjectURL(url);
+      });
     };
   }, [refreshKey]);
 
+  useEffect(() => {
+    const pendingUrls = pendingCoverUrlsRef.current;
+    const itemUrls = new Set(
+      items.flatMap(({ coverUrl }) => (coverUrl ? [coverUrl] : [])),
+    );
+    if (!pendingUrls || pendingUrls.size !== itemUrls.size) return;
+    if ([...pendingUrls].some((url) => !itemUrls.has(url))) return;
+
+    pendingCoverUrlsRef.current = null;
+    const previousUrls = renderedCoverUrlsRef.current;
+    renderedCoverUrlsRef.current = pendingUrls;
+    previousUrls.forEach((url) => {
+      if (!pendingUrls.has(url)) URL.revokeObjectURL(url);
+    });
+  }, [items]);
+
   useEffect(
     () => () => {
-      items.forEach(({ coverUrl }) => {
-        if (coverUrl) URL.revokeObjectURL(coverUrl);
-      });
+      const urls = new Set([
+        ...renderedCoverUrlsRef.current,
+        ...(pendingCoverUrlsRef.current ?? []),
+      ]);
+      urls.forEach((url) => URL.revokeObjectURL(url));
     },
-    [items],
+    [],
   );
 
   const refresh = () => setRefreshKey((current) => current + 1);
@@ -138,7 +174,8 @@ export function LibraryScreen({ onOpen }: LibraryScreenProps) {
     requestFocusRestore();
   }
 
-  function dismissDeleteDialog() {
+  function dismissDeleteDialog(returnToNewEbook = false) {
+    if (returnToNewEbook) returnFocusRef.current = newEbookButtonRef.current;
     setDeleteTarget(null);
     requestFocusRestore();
   }
@@ -200,7 +237,7 @@ export function LibraryScreen({ onOpen }: LibraryScreenProps) {
     try {
       await deleteEbook(deleteTarget.id);
       setSaveState('saved');
-      dismissDeleteDialog();
+      dismissDeleteDialog(true);
       refresh();
     } catch {
       setLoadError('Your ebook could not be deleted. Try again.');
@@ -316,7 +353,7 @@ export function LibraryScreen({ onOpen }: LibraryScreenProps) {
           <h2 id="delete-ebook-title">Delete ebook</h2>
           <p id="delete-ebook-description">Permanently delete {deleteTarget.title} and all of its pages? This cannot be undone.</p>
           <div className="dialog-actions">
-            <button type="button" onClick={dismissDeleteDialog} disabled={isSaving}>Cancel</button>
+            <button type="button" onClick={() => dismissDeleteDialog()} disabled={isSaving}>Cancel</button>
             <button type="button" className="destructive" onClick={handleDelete} disabled={isSaving}>Delete ebook</button>
           </div>
         </dialog>

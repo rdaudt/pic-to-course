@@ -173,6 +173,32 @@ describe('LibraryScreen', () => {
     await waitFor(() => expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:cover-1'));
   });
 
+  it('revokes covers resolved by an abandoned partial library load', async () => {
+    const older = await createEbook('Older cover');
+    const olderPage = await appendPage(older.id, asset());
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    const newer = await createEbook('Newer cover');
+    const newerPage = await appendPage(newer.id, asset());
+    let resolveOlderPage: (value: typeof olderPage) => void = () => undefined;
+    const delayedOlderPage = new Promise<typeof olderPage>((resolve) => {
+      resolveOlderPage = resolve;
+    });
+    const createObjectURL = URL.createObjectURL as ReturnType<typeof vi.fn>;
+    createObjectURL.mockImplementation((blob: Blob) =>
+      blob === newerPage.thumbnailBlob ? 'blob:newer-cover' : 'blob:older-cover',
+    );
+    vi.spyOn(db.pages, 'get')
+      .mockResolvedValueOnce(newerPage)
+      .mockResolvedValueOnce(delayedOlderPage as never);
+
+    const { unmount } = render(<LibraryScreen onOpen={vi.fn()} />);
+    await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalledWith(newerPage.thumbnailBlob));
+    unmount();
+    resolveOlderPage(olderPage);
+
+    await waitFor(() => expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:newer-cover'));
+  });
+
   it('opens and renames an ebook with a valid trimmed title', async () => {
     const ebook = await createEbook('Original');
     const user = userEvent.setup();
@@ -215,6 +241,24 @@ describe('LibraryScreen', () => {
     await waitFor(() =>
       expect(screen.queryByRole('heading', { name: 'Keep me' })).not.toBeInTheDocument(),
     );
+  });
+
+  it('returns focus to New ebook after confirmed deletion removes its trigger', async () => {
+    await createEbook('Remove me');
+    const user = userEvent.setup();
+    render(<LibraryScreen onOpen={vi.fn()} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Delete Remove me' }));
+    await user.click(
+      within(screen.getByRole('dialog', { name: 'Delete ebook' })).getByRole('button', {
+        name: 'Delete ebook',
+      }),
+    );
+
+    await waitFor(() =>
+      expect(screen.queryByRole('heading', { name: 'Remove me' })).not.toBeInTheDocument(),
+    );
+    expect(screen.getByRole('button', { name: 'New ebook' })).toHaveFocus();
   });
 
   it('warns that clearing website data permanently erases editable ebooks', async () => {
