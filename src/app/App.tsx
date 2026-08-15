@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { CameraScreen } from '../camera/CameraScreen';
 import { EditorScreen } from '../editor/EditorScreen';
 import { LibraryScreen } from '../library/LibraryScreen';
 
@@ -22,6 +23,15 @@ export function App() {
         onClose={() => setRoute({ screen: 'library' })}
         onCapture={() => setRoute({ screen: 'camera', ebookId: route.ebookId })}
         onExport={() => setRoute({ screen: 'export', ebookId: route.ebookId })}
+      />
+    );
+  }
+
+  if (route.screen === 'camera') {
+    return (
+      <CameraScreen
+        ebookId={route.ebookId}
+        onClose={() => setRoute({ screen: 'editor', ebookId: route.ebookId })}
       />
     );
   }
