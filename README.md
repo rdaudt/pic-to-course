@@ -4,7 +4,8 @@ Photo Ebook is an offline-first iPad web app for capturing photographs into an
 editable ebook and sharing a PDF. It stores ebooks only in this browser on this
 iPad—there are no accounts or cloud backups.
 
-The deployed app is available at <https://rdaudt.github.io/pic-to-course/>.
+Production is deployed automatically by the Vercel project connected to this
+GitHub repository. Use the production URL shown in the Vercel dashboard.
 
 ## Install on an iPad
 
@@ -53,9 +54,9 @@ once when needed with `npx playwright install chromium`.
 
 ## Deployment
 
-Pushing to `main` runs tests and builds the app, then deploys `dist/` through
-GitHub Pages. Enable GitHub Pages in the repository's Actions deployment source
-if it has not already been enabled.
+Pushing or merging to `main` triggers the connected Vercel production
+deployment. The Vite and PWA base paths are rooted at `/`, so no GitHub Pages
+subpath or additional Vercel rewrite is required.
 
 ## Physical-iPad validation still required
 

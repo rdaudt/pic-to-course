@@ -1,9 +1,10 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+import { PWA_BASE_PATH, PWA_SCOPE, PWA_START_URL } from './src/app/deploymentConfig.ts';
 
 export default defineConfig({
-  base: '/pic-to-course/',
+  base: PWA_BASE_PATH,
   plugins: [
     react(),
     VitePWA({
@@ -12,8 +13,8 @@ export default defineConfig({
         name: 'Photo Ebook',
         short_name: 'Photo Ebook',
         description: 'Create and organize photo ebooks entirely on this iPad.',
-        start_url: '/pic-to-course/',
-        scope: '/pic-to-course/',
+        start_url: PWA_START_URL,
+        scope: PWA_SCOPE,
         display: 'standalone',
         orientation: 'any',
         theme_color: '#1e293b',

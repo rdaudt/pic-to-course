@@ -70,7 +70,7 @@ async function persistedFullImagesAreJpegs(page: Page): Promise<boolean> {
 }
 
 test('persists deterministic captured pages through close, reopen, reorder, rotation, deletion, and reload', async ({ page }) => {
-  await page.goto('/pic-to-course/');
+  await page.goto('/');
   await page.getByRole('button', { name: 'New ebook' }).click();
   await page.getByLabel('Title').fill('Weekend field notes');
   await page.getByRole('button', { name: 'Create ebook' }).click();
@@ -165,7 +165,7 @@ test('persists deterministic captured pages through close, reopen, reorder, rota
 
 test('cancels an actual JPEG-backed export without changing the editable ebook', async ({ page }) => {
   test.setTimeout(90_000);
-  await page.goto('/pic-to-course/');
+  await page.goto('/');
   await page.getByRole('button', { name: 'New ebook' }).click();
   await page.getByLabel('Title').fill('Cancellation proof');
   await page.getByRole('button', { name: 'Create ebook' }).click();
@@ -204,7 +204,7 @@ test('cancels an actual JPEG-backed export without changing the editable ebook',
 });
 
 test('loads the built application from its cache while offline', async ({ page, context }) => {
-  await page.goto('/pic-to-course/');
+  await page.goto('/');
   await expect(page.getByRole('heading', { name: 'My ebooks' })).toBeVisible();
   await page.evaluate(() => navigator.serviceWorker.ready);
   await page.reload();
