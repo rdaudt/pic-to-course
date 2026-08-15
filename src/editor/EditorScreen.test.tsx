@@ -72,6 +72,10 @@ describe('EditorScreen', () => {
   it('renders thumbnails in exactly the ebook pageIds order and labels the first page as cover', async () => {
     const { ebook, first, second } = await seededEditor();
     await reorderPages(ebook.id, [second.id, first.id]);
+    const createObjectURL = URL.createObjectURL as ReturnType<typeof vi.fn>;
+    createObjectURL
+      .mockReturnValueOnce('blob:second-page')
+      .mockReturnValueOnce('blob:first-page');
 
     render(<EditorScreen ebookId={ebook.id} onClose={vi.fn()} onCapture={vi.fn()} onExport={vi.fn()} />);
 
@@ -79,6 +83,10 @@ describe('EditorScreen', () => {
     expect(thumbnails.map((thumbnail) => thumbnail.getAttribute('alt'))).toEqual([
       'Thumbnail for page 1',
       'Thumbnail for page 2',
+    ]);
+    expect(thumbnails.map((thumbnail) => thumbnail.getAttribute('src'))).toEqual([
+      'blob:second-page',
+      'blob:first-page',
     ]);
     expect(screen.getByText('Cover')).toBeVisible();
   });
@@ -155,6 +163,26 @@ describe('EditorScreen', () => {
     expect(screen.getByRole('button', { name: 'Close' })).toBeEnabled();
   });
 
+  it('keeps a confirmed deletion dialog open when Escape is pressed during its save', async () => {
+    const { ebook } = await seededEditor();
+    let resolveDeletion: () => void = () => undefined;
+    vi.spyOn(database, 'deletePage').mockImplementationOnce(
+      () => new Promise<void>((resolve) => { resolveDeletion = resolve; }),
+    );
+    const user = userEvent.setup();
+    render(<EditorScreen ebookId={ebook.id} onClose={vi.fn()} onCapture={vi.fn()} onExport={vi.fn()} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Delete page 1' }));
+    const dialog = screen.getByRole('dialog', { name: 'Delete page' });
+    await user.click(within(dialog).getByRole('button', { name: 'Delete page' }));
+    await screen.findByText('Saving…');
+    fireEvent(dialog, new Event('cancel', { cancelable: true }));
+
+    expect(screen.getByRole('dialog', { name: 'Delete page' })).toBeVisible();
+    resolveDeletion();
+    await screen.findByText('Saved');
+  });
+
   it('navigates to capture and PDF creation', async () => {
     const ebook = await createEbook('Navigation');
     const onCapture = vi.fn();
@@ -193,5 +221,22 @@ describe('EditorScreen', () => {
 
     await screen.findByRole('alert');
     await waitFor(() => expect(URL.revokeObjectURL).toHaveBeenCalledWith(`blob:${first.thumbnailBlob.size}`));
+  });
+
+  it('revokes a delayed thumbnail when another page fails first', async () => {
+    const { ebook, second } = await seededEditor();
+    let resolvePage: (value: typeof second) => void = () => undefined;
+    const delayedPage = new Promise<typeof second>((resolve) => { resolvePage = resolve; });
+    const createObjectURL = URL.createObjectURL as ReturnType<typeof vi.fn>;
+    createObjectURL.mockReturnValue('blob:delayed-page');
+    vi.spyOn(db.pages, 'get')
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(delayedPage as never);
+
+    render(<EditorScreen ebookId={ebook.id} onClose={vi.fn()} onCapture={vi.fn()} onExport={vi.fn()} />);
+
+    await screen.findByRole('alert');
+    resolvePage(second);
+    await waitFor(() => expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:delayed-page'));
   });
 });

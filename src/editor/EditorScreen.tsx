@@ -79,9 +79,11 @@ export function EditorScreen({ ebookId, onClose, onCapture, onExport }: EditorSc
         setPages(loadedPages);
         setLoadError('');
       } catch {
+        const shouldReportError = active;
+        active = false;
         createdUrls.forEach((url) => URL.revokeObjectURL(url));
         createdUrls.clear();
-        if (active) setLoadError('This ebook could not be loaded. Return to My ebooks and try again.');
+        if (shouldReportError) setLoadError('This ebook could not be loaded. Return to My ebooks and try again.');
       }
     }
 
@@ -192,6 +194,7 @@ export function EditorScreen({ ebookId, onClose, onCapture, onExport }: EditorSc
           aria-describedby="delete-page-description"
           onCancel={(event) => {
             event.preventDefault();
+            if (isSaving) return;
             dismissDeleteDialog();
           }}
         >
