@@ -33,6 +33,25 @@ button:focus-visible {
   outline-offset: 3px;
 }
 
+.download-link {
+  display: inline-grid;
+  min-height: 48px;
+  min-width: 48px;
+  place-items: center;
+  border-radius: 12px;
+  padding: 0 24px;
+  color: #ffffff;
+  background: #1e293b;
+  font-size: 1.125rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.download-link:focus-visible {
+  outline: 3px solid #2563eb;
+  outline-offset: 3px;
+}
+
 input {
   min-height: 48px;
   width: 100%;
@@ -133,16 +152,27 @@ p {
   background: #ffffff;
 }
 
-.ebook-cover {
+.ebook-cover-viewport {
+  display: grid;
   width: 100%;
   min-height: 10rem;
-  height: 100%;
-  object-fit: cover;
+  aspect-ratio: 4 / 3;
+  place-items: center;
+  align-self: start;
+  overflow: hidden;
   background: #e2e8f0;
+}
+
+.ebook-cover {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transition: transform 160ms ease;
 }
 
 .ebook-cover-empty {
   display: grid;
+  min-height: 10rem;
   place-items: center;
   padding: 1rem;
   color: #475569;

@@ -6,11 +6,13 @@ import { requestPersistentStorage } from '../storage/storageHealth';
 
 interface LibraryScreenProps {
   onOpen: (id: string) => void;
+  initialFocusEbookId?: string;
 }
 
 interface LibraryItem {
   ebook: EbookRecord;
   coverUrl?: string;
+  coverRotation?: 0 | 90 | 180 | 270;
 }
 
 const isBlank = (title: string) => !title.trim();
@@ -33,7 +35,7 @@ function useNativeModal(dialogRef: RefObject<HTMLDialogElement | null>, isOpen: 
   }, [dialogRef, isOpen]);
 }
 
-export function LibraryScreen({ onOpen }: LibraryScreenProps) {
+export function LibraryScreen({ onOpen, initialFocusEbookId }: LibraryScreenProps) {
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
   const [loadError, setLoadError] = useState('');
@@ -53,6 +55,8 @@ export function LibraryScreen({ onOpen }: LibraryScreenProps) {
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const renderedCoverUrlsRef = useRef<Set<string>>(new Set());
   const pendingCoverUrlsRef = useRef<Set<string> | null>(null);
+  const openButtonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+  const routeFocusAppliedRef = useRef(false);
   const [shouldRestoreFocus, setShouldRestoreFocus] = useState(false);
 
   useNativeModal(createDialogRef, isCreateOpen);
@@ -60,6 +64,14 @@ export function LibraryScreen({ onOpen }: LibraryScreenProps) {
   useNativeModal(deleteDialogRef, Boolean(deleteTarget));
 
   const hasOpenDialog = isCreateOpen || Boolean(renameTarget) || Boolean(deleteTarget);
+
+  useEffect(() => {
+    if (!initialFocusEbookId || routeFocusAppliedRef.current) return;
+    const target = openButtonRefs.current.get(initialFocusEbookId);
+    if (!target) return;
+    routeFocusAppliedRef.current = true;
+    target.focus();
+  }, [initialFocusEbookId, items]);
 
   useEffect(() => {
     if (!shouldRestoreFocus || hasOpenDialog) return;
@@ -102,7 +114,7 @@ export function LibraryScreen({ onOpen }: LibraryScreenProps) {
               URL.revokeObjectURL(coverUrl);
               return { ebook };
             }
-            return { ebook, coverUrl };
+            return { ebook, coverUrl, coverRotation: firstPage.rotation };
           }),
         );
 
@@ -277,19 +289,38 @@ export function LibraryScreen({ onOpen }: LibraryScreenProps) {
 
       {items.length > 0 ? (
         <section className="ebook-grid" aria-label="Ebooks">
-          {items.map(({ ebook, coverUrl }) => (
+          {items.map(({ ebook, coverUrl, coverRotation = 0 }) => (
             <article className="ebook-card" key={ebook.id}>
-              {coverUrl ? (
-                <img className="ebook-cover" src={coverUrl} alt={`Cover for ${ebook.title}`} />
-              ) : (
-                <div className="ebook-cover ebook-cover-empty" aria-hidden="true">No pages yet</div>
-              )}
+              <div className="ebook-cover-viewport">
+                {coverUrl ? (
+                  <img
+                    className="ebook-cover"
+                    src={coverUrl}
+                    alt={`Cover for ${ebook.title}`}
+                    style={{
+                      transform: `rotate(${coverRotation}deg) scale(${coverRotation === 90 || coverRotation === 270 ? 0.75 : 1})`,
+                    }}
+                  />
+                ) : (
+                  <div className="ebook-cover ebook-cover-empty" aria-hidden="true">No pages yet</div>
+                )}
+              </div>
               <div className="ebook-card-content">
                 <h2>{ebook.title}</h2>
                 <p>{`${ebook.pageIds.length} ${ebook.pageIds.length === 1 ? 'page' : 'pages'}`}</p>
                 <p>Last edited {editedDate(ebook.updatedAt)}</p>
                 <div className="ebook-actions">
-                  <button type="button" onClick={() => onOpen(ebook.id)} aria-label={`Open ${ebook.title}`}>Open</button>
+                  <button
+                    ref={(element) => {
+                      if (element) openButtonRefs.current.set(ebook.id, element);
+                      else openButtonRefs.current.delete(ebook.id);
+                    }}
+                    type="button"
+                    onClick={() => onOpen(ebook.id)}
+                    aria-label={`Open ${ebook.title}`}
+                  >
+                    Open
+                  </button>
                   <button
                     type="button"
                     onClick={(event) => {

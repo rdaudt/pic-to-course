@@ -8,6 +8,7 @@ import { installTestCaptureAdapter, isTestCaptureMode, takeTestCaptureAsset } fr
 interface CameraScreenProps {
   ebookId: string;
   onClose: () => void;
+  initialFocus?: boolean;
 }
 
 type CameraState = 'loading' | 'ready' | 'error';
@@ -46,7 +47,8 @@ function storageMessage(health: StorageHealth | null) {
   return '';
 }
 
-export function CameraScreen({ ebookId, onClose }: CameraScreenProps) {
+export function CameraScreen({ ebookId, onClose, initialFocus }: CameraScreenProps) {
+  const headingRef = useRef<HTMLHeadingElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const mountedRef = useRef(false);
@@ -72,6 +74,10 @@ export function CameraScreen({ ebookId, onClose }: CameraScreenProps) {
       storageOperationRef.current += 1;
     };
   }, []);
+
+  useEffect(() => {
+    if (initialFocus) headingRef.current?.focus();
+  }, [initialFocus]);
 
   async function refreshStorage(): Promise<StorageHealth | null> {
     const operation = ++storageOperationRef.current;
@@ -185,7 +191,7 @@ export function CameraScreen({ ebookId, onClose }: CameraScreenProps) {
     <main className="app camera-screen">
       <header className="camera-header">
         <div>
-          <h1>Capture pages</h1>
+          <h1 ref={headingRef} tabIndex={-1}>Capture pages</h1>
           <p aria-live="polite">{capturedCount} {capturedCount === 1 ? 'page' : 'pages'} captured</p>
         </div>
         <button type="button" onClick={onClose} disabled={isSaving}>Close camera</button>

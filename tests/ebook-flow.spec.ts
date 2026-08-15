@@ -1,4 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
+import { PDFDocument } from 'pdf-lib';
 
 type PersistedTestPage = {
   identity: string;
@@ -31,6 +33,39 @@ async function persistedTestPages(page: Page): Promise<PersistedTestPage[]> {
       if (!identity) throw new Error('The deterministic page metadata is missing.');
       return { identity, rotation: record.rotation };
     }));
+  });
+}
+
+async function persistedFullImagesAreJpegs(page: Page): Promise<boolean> {
+  return page.evaluate(async () => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('photo-ebook');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const transaction = database.transaction(['ebooks', 'pages'], 'readonly');
+    const ebooks = transaction.objectStore('ebooks');
+    const pages = transaction.objectStore('pages');
+    const ebook = await new Promise<{ pageIds: string[] }>((resolve, reject) => {
+      const request = ebooks.getAll();
+      request.onsuccess = () => resolve(request.result[0]);
+      request.onerror = () => reject(request.error);
+    });
+
+    const checks = await Promise.all(ebook.pageIds.map(async (pageId) => {
+      const record = await new Promise<{ imageBlob: Blob }>((resolve, reject) => {
+        const request = pages.get(pageId);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      const bytes = new Uint8Array(await record.imageBlob.arrayBuffer());
+      return record.imageBlob.type === 'image/jpeg'
+        && bytes[0] === 0xff
+        && bytes[1] === 0xd8
+        && bytes.at(-2) === 0xff
+        && bytes.at(-1) === 0xd9;
+    }));
+    return checks.every(Boolean);
   });
 }
 
@@ -101,6 +136,71 @@ test('persists deterministic captured pages through close, reopen, reorder, rota
     { identity: 'Test page 2', rotation: 90 },
     { identity: 'Test page 1', rotation: 0 },
   ]);
+
+  await page.getByRole('button', { name: 'Close' }).click();
+  await page.getByRole('button', { name: 'Rename Weekend field notes' }).click();
+  const renameDialog = page.getByRole('dialog', { name: 'Rename ebook' });
+  await renameDialog.getByLabel('Title').fill('Renamed field notes');
+  await renameDialog.getByRole('button', { name: 'Rename ebook' }).click();
+  await expect(page.getByRole('heading', { name: 'Renamed field notes' })).toBeVisible();
+  await page.getByRole('button', { name: 'Open Renamed field notes' }).click();
+  await expect(persistedFullImagesAreJpegs(page)).resolves.toBe(true);
+
+  await page.getByRole('button', { name: 'Create PDF' }).click();
+  await expect(page.getByRole('heading', { name: 'Create PDF' })).toBeFocused();
+  await page.getByRole('button', { name: 'Create PDF' }).click();
+  const downloadLink = await page.getByRole('link', { name: 'Download PDF' });
+  await expect(downloadLink).toHaveAttribute('href', /^blob:/);
+  const downloadPromise = page.waitForEvent('download');
+  await downloadLink.click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe('Renamed field notes.pdf');
+  const downloadPath = await download.path();
+  if (!downloadPath) throw new Error('The generated PDF download was unavailable.');
+  const pdfBytes = await readFile(downloadPath);
+  const pdf = await PDFDocument.load(pdfBytes);
+  expect(pdf.getPageCount()).toBe(2);
+  expect((pdfBytes.toString('latin1').match(/\/Subtype \/Image/g) ?? [])).toHaveLength(2);
+});
+
+test('cancels an actual JPEG-backed export without changing the editable ebook', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.goto('/pic-to-course/');
+  await page.getByRole('button', { name: 'New ebook' }).click();
+  await page.getByLabel('Title').fill('Cancellation proof');
+  await page.getByRole('button', { name: 'Create ebook' }).click();
+  await page.getByRole('button', { name: 'Capture a photo' }).click();
+  await page.waitForFunction(() => Boolean(window.__PHOTO_EBOOK_TEST__));
+  await page.evaluate(() => window.__PHOTO_EBOOK_TEST__!.setCaptureCount(30));
+  const capture = page.getByRole('button', { name: 'Capture photo' });
+  for (let pageNumber = 0; pageNumber < 30; pageNumber += 1) await capture.click();
+  await expect(page.getByText('30 pages captured')).toBeVisible();
+  await expect(persistedFullImagesAreJpegs(page)).resolves.toBe(true);
+  const before = await persistedTestPages(page);
+
+  await page.getByRole('button', { name: 'Close camera' }).click();
+  await page.getByRole('button', { name: 'Create PDF' }).click();
+  await page.evaluate(() => {
+    const cancelWhenAvailable = () => {
+      const cancel = [...document.querySelectorAll<HTMLButtonElement>('button')]
+        .find((button) => button.textContent === 'Cancel PDF creation');
+      if (!cancel) return false;
+      cancel.click();
+      return true;
+    };
+    if (cancelWhenAvailable()) return;
+    const observer = new MutationObserver(() => {
+      if (cancelWhenAvailable()) observer.disconnect();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  });
+  await page.getByRole('button', { name: 'Create PDF' }).click();
+
+  await expect(page.getByRole('alert')).toHaveText('PDF creation was cancelled.');
+  await expect(page.getByRole('link', { name: 'Download PDF' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Back to ebook editor' }).click();
+  await expect(page.getByRole('heading', { name: 'Cancellation proof' })).toBeVisible();
+  expect(await persistedTestPages(page)).toEqual(before);
 });
 
 test('loads the built application from its cache while offline', async ({ page, context }) => {

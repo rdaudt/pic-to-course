@@ -122,7 +122,9 @@ describe('EditorScreen', () => {
     await user.click(await screen.findByRole('button', { name: 'Rotate page 1' }));
 
     await waitFor(async () => expect((await db.pages.get(first.id))?.rotation).toBe(90));
-    expect(screen.getByRole('img', { name: 'Thumbnail for page 1' })).toHaveStyle({ transform: 'rotate(90deg)' });
+    expect(screen.getByRole('img', { name: 'Thumbnail for page 1' })).toHaveStyle({
+      transform: 'rotate(90deg) scale(0.75)',
+    });
   });
 
   it('deletes a page only after confirmation and restores focus to Capture when the trigger disappears', async () => {
@@ -195,6 +197,34 @@ describe('EditorScreen', () => {
 
     expect(onCapture).toHaveBeenCalledWith();
     expect(onExport).toHaveBeenCalledWith();
+  });
+
+  it('focuses its heading on forward navigation and the export action on intentional return', async () => {
+    const ebook = await createEbook('Focus route');
+    const firstRender = render(
+      <EditorScreen
+        ebookId={ebook.id}
+        onClose={vi.fn()}
+        onCapture={vi.fn()}
+        onExport={vi.fn()}
+        initialFocus="heading"
+      />,
+    );
+
+    expect(await screen.findByRole('heading', { name: 'Focus route' })).toHaveFocus();
+    firstRender.unmount();
+
+    render(
+      <EditorScreen
+        ebookId={ebook.id}
+        onClose={vi.fn()}
+        onCapture={vi.fn()}
+        onExport={vi.fn()}
+        initialFocus="export"
+      />,
+    );
+    await screen.findByRole('heading', { name: 'Focus route' });
+    expect(screen.getByRole('button', { name: 'Create PDF' })).toHaveFocus();
   });
 
   it('revokes thumbnail URLs when the screen closes while thumbnails are loading', async () => {

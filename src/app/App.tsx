@@ -6,8 +6,8 @@ import { ExportScreen } from '../export/ExportScreen';
 import { LibraryScreen } from '../library/LibraryScreen';
 
 export type Route =
-  | { screen: 'library' }
-  | { screen: 'editor'; ebookId: string }
+  | { screen: 'library'; focusEbookId?: string }
+  | { screen: 'editor'; ebookId: string; focus: 'heading' | 'capture' | 'export' }
   | { screen: 'camera'; ebookId: string }
   | { screen: 'export'; ebookId: string };
 
@@ -18,7 +18,10 @@ export function App() {
   if (route.screen === 'library') {
     return (
       <>
-        <LibraryScreen onOpen={(ebookId) => setRoute({ screen: 'editor', ebookId })} />
+        <LibraryScreen
+          initialFocusEbookId={route.focusEbookId}
+          onOpen={(ebookId) => setRoute({ screen: 'editor', ebookId, focus: 'heading' })}
+        />
         {needRefresh && (
           <aside className="app-update" aria-live="polite">
             <span>A new version is ready.</span>
@@ -33,7 +36,8 @@ export function App() {
     return (
       <EditorScreen
         ebookId={route.ebookId}
-        onClose={() => setRoute({ screen: 'library' })}
+        initialFocus={route.focus}
+        onClose={() => setRoute({ screen: 'library', focusEbookId: route.ebookId })}
         onCapture={() => setRoute({ screen: 'camera', ebookId: route.ebookId })}
         onExport={() => setRoute({ screen: 'export', ebookId: route.ebookId })}
       />
@@ -44,10 +48,17 @@ export function App() {
     return (
       <CameraScreen
         ebookId={route.ebookId}
-        onClose={() => setRoute({ screen: 'editor', ebookId: route.ebookId })}
+        initialFocus
+        onClose={() => setRoute({ screen: 'editor', ebookId: route.ebookId, focus: 'capture' })}
       />
     );
   }
 
-  return <ExportScreen ebookId={route.ebookId} onClose={() => setRoute({ screen: 'editor', ebookId: route.ebookId })} />;
+  return (
+    <ExportScreen
+      ebookId={route.ebookId}
+      initialFocus
+      onClose={() => setRoute({ screen: 'editor', ebookId: route.ebookId, focus: 'export' })}
+    />
+  );
 }

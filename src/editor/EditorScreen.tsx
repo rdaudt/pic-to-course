@@ -9,6 +9,7 @@ interface EditorScreenProps {
   onClose: () => void;
   onCapture: () => void;
   onExport: () => void;
+  initialFocus?: 'heading' | 'capture' | 'export';
 }
 
 function useNativeModal(dialogRef: RefObject<HTMLDialogElement | null>, isOpen: boolean) {
@@ -24,7 +25,7 @@ function useNativeModal(dialogRef: RefObject<HTMLDialogElement | null>, isOpen: 
   }, [dialogRef, isOpen]);
 }
 
-export function EditorScreen({ ebookId, onClose, onCapture, onExport }: EditorScreenProps) {
+export function EditorScreen({ ebookId, onClose, onCapture, onExport, initialFocus }: EditorScreenProps) {
   const [ebook, setEbook] = useState<EbookRecord | null>(null);
   const [pages, setPages] = useState<EditorPage[]>([]);
   const [loadError, setLoadError] = useState('');
@@ -34,11 +35,22 @@ export function EditorScreen({ ebookId, onClose, onCapture, onExport }: EditorSc
   const [deleteTarget, setDeleteTarget] = useState<EditorPage | null>(null);
   const [shouldRestoreFocus, setShouldRestoreFocus] = useState(false);
   const deleteDialogRef = useRef<HTMLDialogElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
   const captureButtonRef = useRef<HTMLButtonElement>(null);
+  const exportButtonRef = useRef<HTMLButtonElement>(null);
+  const initialFocusAppliedRef = useRef(false);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const thumbnailUrlsRef = useRef<Set<string>>(new Set());
 
   useNativeModal(deleteDialogRef, Boolean(deleteTarget));
+
+  useEffect(() => {
+    if (!ebook || !initialFocus || initialFocusAppliedRef.current) return;
+    initialFocusAppliedRef.current = true;
+    if (initialFocus === 'heading') headingRef.current?.focus();
+    if (initialFocus === 'capture') captureButtonRef.current?.focus();
+    if (initialFocus === 'export') exportButtonRef.current?.focus();
+  }, [ebook, initialFocus]);
 
   useEffect(() => {
     if (!shouldRestoreFocus || deleteTarget) return;
@@ -164,7 +176,7 @@ export function EditorScreen({ ebookId, onClose, onCapture, onExport }: EditorSc
     <main className="app editor-screen">
       <header className="editor-header">
         <div>
-          <h1>{ebook?.title ?? 'Ebook editor'}</h1>
+          <h1 ref={headingRef} tabIndex={-1}>{ebook?.title ?? 'Ebook editor'}</h1>
           <p>{pages.length} {pages.length === 1 ? 'page' : 'pages'}</p>
         </div>
         <button type="button" onClick={onClose} disabled={isSaving}>Close</button>
@@ -184,7 +196,7 @@ export function EditorScreen({ ebookId, onClose, onCapture, onExport }: EditorSc
 
       <nav className="editor-navigation" aria-label="Ebook actions">
         <button ref={captureButtonRef} type="button" onClick={() => onCapture()} disabled={isSaving}>Capture a photo</button>
-        <button type="button" onClick={() => onExport()} disabled={isSaving}>Create PDF</button>
+        <button ref={exportButtonRef} type="button" onClick={() => onExport()} disabled={isSaving}>Create PDF</button>
       </nav>
 
       {deleteTarget && (

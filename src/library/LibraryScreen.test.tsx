@@ -137,6 +137,20 @@ describe('LibraryScreen', () => {
     expect(within(cards[1]).getByText('1 page')).toBeVisible();
   });
 
+  it('shows the first page cover with its saved rotation fitted inside the card', async () => {
+    const ebook = await createEbook('Rotated cover');
+    const page = await appendPage(ebook.id, asset());
+    await db.pages.update(page.id, { rotation: 270 });
+
+    render(<LibraryScreen onOpen={vi.fn()} />);
+
+    const cover = await screen.findByRole('img', { name: 'Cover for Rotated cover' });
+    expect(cover).toHaveStyle({
+      transform: 'rotate(270deg) scale(0.75)',
+    });
+    expect(cover.parentElement).toHaveClass('ebook-cover-viewport');
+  });
+
   it('revokes a cover URL when the screen closes while that cover is loading', async () => {
     const ebook = await createEbook('Closing');
     const page = await appendPage(ebook.id, asset());
@@ -232,6 +246,14 @@ describe('LibraryScreen', () => {
 
     expect(await screen.findByRole('heading', { name: 'Renamed' })).toBeVisible();
     expect(await db.ebooks.get(ebook.id)).toMatchObject({ title: 'Renamed' });
+  });
+
+  it('restores route focus to the ebook that was intentionally closed', async () => {
+    const ebook = await createEbook('Return here');
+
+    render(<LibraryScreen onOpen={vi.fn()} initialFocusEbookId={ebook.id} />);
+
+    expect(await screen.findByRole('button', { name: 'Open Return here' })).toHaveFocus();
   });
 
   it('only deletes an ebook after explicit confirmation and supports cancel', async () => {

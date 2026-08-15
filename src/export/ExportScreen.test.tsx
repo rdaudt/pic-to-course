@@ -23,6 +23,7 @@ describe('ExportScreen', () => {
   beforeEach(async () => {
     await db.delete();
     await db.open();
+    vi.mocked(createPdf).mockReset().mockResolvedValue(new Blob(['pdf'], { type: 'application/pdf' }));
     vi.stubGlobal('URL', { createObjectURL: vi.fn(() => 'blob:pdf'), revokeObjectURL: vi.fn() });
   });
 
@@ -47,21 +48,33 @@ describe('ExportScreen', () => {
     expect(URL.createObjectURL).not.toHaveBeenCalled();
   });
 
-  it('downloads and revokes a temporary PDF URL when file sharing is unavailable', async () => {
+  it('focuses the screen heading when entered from the editor', () => {
+    render(<ExportScreen ebookId="ebook-1" onClose={vi.fn()} initialFocus />);
+
+    expect(screen.getByRole('heading', { name: 'Create PDF' })).toHaveFocus();
+  });
+
+  it('shows a persistent download link without clicking or revoking it when file sharing is unavailable', async () => {
     const ebook = await seededEbook();
     Object.defineProperty(navigator, 'canShare', { configurable: true, value: vi.fn(() => false) });
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
     const user = userEvent.setup();
 
-    render(<ExportScreen ebookId={ebook.id} onClose={vi.fn()} />);
+    const { unmount } = render(<ExportScreen ebookId={ebook.id} onClose={vi.fn()} />);
     await user.click(await screen.findByRole('button', { name: 'Create PDF' }));
 
-    await waitFor(() => expect(click).toHaveBeenCalledOnce());
+    const link = await screen.findByRole('link', { name: 'Download PDF' });
+    expect(link).toHaveAttribute('href', 'blob:pdf');
+    expect(link).toHaveAttribute('download', 'Field Notes.pdf');
+    expect(click).not.toHaveBeenCalled();
     expect(URL.createObjectURL).toHaveBeenCalledOnce();
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+
+    unmount();
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:pdf');
   });
 
-  it('offers the retained PDF as a download after native sharing fails', async () => {
+  it('offers a persistent download link after native sharing fails', async () => {
     const ebook = await seededEbook();
     Object.defineProperty(navigator, 'canShare', { configurable: true, value: vi.fn(() => true) });
     Object.defineProperty(navigator, 'share', { configurable: true, value: vi.fn().mockRejectedValue(new Error('Share failed')) });
@@ -71,10 +84,33 @@ describe('ExportScreen', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Create PDF' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('The PDF is ready, but sharing did not finish. Try again.');
-    await user.click(screen.getByRole('button', { name: 'Download PDF' }));
+    expect(screen.getByRole('link', { name: 'Download PDF' })).toHaveAttribute('href', 'blob:pdf');
+    expect(click).not.toHaveBeenCalled();
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+  });
 
-    expect(click).toHaveBeenCalledOnce();
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:pdf');
+  it('revokes the previous fallback only when a replacement PDF is ready, then revokes the current URL on unmount', async () => {
+    const ebook = await seededEbook();
+    const firstPdf = new Blob(['first'], { type: 'application/pdf' });
+    const secondPdf = new Blob(['second'], { type: 'application/pdf' });
+    vi.mocked(createPdf).mockResolvedValueOnce(firstPdf).mockResolvedValueOnce(secondPdf);
+    vi.mocked(URL.createObjectURL)
+      .mockReturnValueOnce('blob:first-pdf')
+      .mockReturnValueOnce('blob:second-pdf');
+    Object.defineProperty(navigator, 'canShare', { configurable: true, value: vi.fn(() => false) });
+    const user = userEvent.setup();
+    const { unmount } = render(<ExportScreen ebookId={ebook.id} onClose={vi.fn()} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Create PDF' }));
+    expect(await screen.findByRole('link', { name: 'Download PDF' })).toHaveAttribute('href', 'blob:first-pdf');
+    await user.click(screen.getByRole('button', { name: 'Create another PDF' }));
+
+    await waitFor(() => expect(screen.getByRole('link', { name: 'Download PDF' })).toHaveAttribute('href', 'blob:second-pdf'));
+    expect(URL.revokeObjectURL).toHaveBeenCalledTimes(1);
+    expect(URL.revokeObjectURL).toHaveBeenNthCalledWith(1, 'blob:first-pdf');
+
+    unmount();
+    expect(URL.revokeObjectURL).toHaveBeenNthCalledWith(2, 'blob:second-pdf');
   });
 
   it('blocks an empty ebook with a helpful message', async () => {
@@ -125,6 +161,30 @@ describe('ExportScreen', () => {
 
     finishShare();
     await screen.findByRole('status', { name: '' });
+  });
+
+  it('disables Back during native sharing and ignores share completion after unmount', async () => {
+    const ebook = await seededEbook();
+    let finishShare: () => void = () => undefined;
+    const pendingShare = new Promise<void>((resolve) => { finishShare = resolve; });
+    Object.defineProperty(navigator, 'canShare', { configurable: true, value: vi.fn(() => true) });
+    Object.defineProperty(navigator, 'share', { configurable: true, value: vi.fn(() => pendingShare) });
+    const onClose = vi.fn();
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const user = userEvent.setup();
+    const { unmount } = render(<ExportScreen ebookId={ebook.id} onClose={onClose} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Create PDF' }));
+    await screen.findByText('Sharing PDF…');
+    expect(screen.getByRole('button', { name: 'Back to ebook editor' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Back to ebook editor' }));
+    expect(onClose).not.toHaveBeenCalled();
+
+    unmount();
+    finishShare();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(consoleError).not.toHaveBeenCalled();
   });
 
   it('sanitizes a user title for the shared file name', () => {

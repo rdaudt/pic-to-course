@@ -39,6 +39,7 @@ function SortablePage({ page, position, onRotate, onDelete, disabled }: Sortable
     transition,
   } = useSortable({ id: page.id, disabled });
   const pageNumber = position + 1;
+  const thumbnailScale = page.rotation === 90 || page.rotation === 270 ? 0.75 : 1;
 
   return (
     <article
@@ -52,7 +53,7 @@ function SortablePage({ page, position, onRotate, onDelete, disabled }: Sortable
           className="page-thumbnail"
           src={page.thumbnailUrl}
           alt={`Thumbnail for page ${pageNumber}`}
-          style={{ transform: `rotate(${page.rotation}deg)` }}
+          style={{ transform: `rotate(${page.rotation}deg) scale(${thumbnailScale})` }}
         />
       </div>
       <div className="page-card-actions">

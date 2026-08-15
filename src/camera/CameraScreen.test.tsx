@@ -85,6 +85,12 @@ describe('CameraScreen', () => {
     expect(screen.getByText('0 pages captured')).toBeVisible();
   });
 
+  it('focuses the screen heading when entered from the editor', async () => {
+    render(<CameraScreen ebookId="ebook-1" onClose={vi.fn()} initialFocus />);
+
+    expect(screen.getByRole('heading', { name: 'Capture pages' })).toHaveFocus();
+  });
+
   it('gives iPad Settings guidance when camera permission is denied', async () => {
     getUserMedia.mockRejectedValueOnce(Object.assign(new Error('denied'), { name: 'NotAllowedError' }));
     render(<CameraScreen ebookId="ebook-1" onClose={vi.fn()} />);
