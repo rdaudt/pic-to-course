@@ -133,6 +133,59 @@ describe('CameraScreen', () => {
     expect(screen.getByRole('button', { name: 'Capture photo' })).toBeEnabled();
   });
 
+  it('blocks capture and offers a storage-specific retry when the initial health check fails', async () => {
+    vi.mocked(getStorageHealth)
+      .mockRejectedValueOnce(new Error('estimate failed'))
+      .mockResolvedValueOnce({ level: 'ok' });
+    const user = userEvent.setup();
+    render(<CameraScreen ebookId="ebook-1" onClose={vi.fn()} />);
+    await makeViewfinderReady();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('could not check available iPad storage');
+    expect(screen.getByRole('button', { name: 'Capture photo' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Check storage again' }));
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Capture photo' })).toBeEnabled());
+  });
+
+  it('keeps capture blocked with storage guidance when a manual health recheck fails', async () => {
+    vi.mocked(getStorageHealth)
+      .mockResolvedValueOnce({ level: 'critical', free: 10 })
+      .mockRejectedValueOnce(new Error('estimate failed'));
+    const user = userEvent.setup();
+    render(<CameraScreen ebookId="ebook-1" onClose={vi.fn()} />);
+    await makeViewfinderReady();
+
+    await screen.findByRole('alert', { name: '' });
+    await user.click(screen.getByRole('button', { name: 'Check storage again' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('could not check available iPad storage');
+    expect(screen.getByRole('button', { name: 'Capture photo' })).toBeDisabled();
+  });
+
+  it('rechecks storage immediately before capture and does not create a page when space becomes critical', async () => {
+    vi.mocked(getStorageHealth)
+      .mockResolvedValueOnce({ level: 'ok' })
+      .mockResolvedValueOnce({ level: 'critical', free: 10 })
+      .mockResolvedValueOnce({ level: 'ok' });
+    const user = userEvent.setup();
+    render(<CameraScreen ebookId="ebook-1" onClose={vi.fn()} />);
+    await makeViewfinderReady();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Capture photo' })).toBeEnabled());
+
+    await user.click(screen.getByRole('button', { name: 'Capture photo' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Not enough space');
+    expect(captureFrame).not.toHaveBeenCalled();
+    expect(processCapturedImage).not.toHaveBeenCalled();
+    expect(appendPage).not.toHaveBeenCalled();
+    expect(screen.getByText('0 pages captured')).toBeVisible();
+
+    await user.click(screen.getByRole('button', { name: 'Check storage again' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Capture photo' })).toBeEnabled());
+    expect(screen.queryByText(/Not enough space to safely save another page/)).not.toBeInTheDocument();
+  });
+
   it('offers retry after processing fails without creating a page', async () => {
     vi.mocked(processCapturedImage)
       .mockRejectedValueOnce(new Error('encode failed'))
@@ -149,6 +202,25 @@ describe('CameraScreen', () => {
     await user.click(screen.getByRole('button', { name: 'Capture photo' }));
     await screen.findByText('1 page captured');
     expect(appendPage).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not increment the counter after append fails and allows a retry', async () => {
+    vi.mocked(appendPage)
+      .mockRejectedValueOnce(new Error('write failed'))
+      .mockResolvedValueOnce({ id: 'page-1' } as never);
+    const user = userEvent.setup();
+    render(<CameraScreen ebookId="ebook-1" onClose={vi.fn()} />);
+    await makeViewfinderReady();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Capture photo' })).toBeEnabled());
+
+    await user.click(screen.getByRole('button', { name: 'Capture photo' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('could not be processed or saved');
+    expect(screen.getByText('0 pages captured')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Capture photo' })).toBeEnabled();
+
+    await user.click(screen.getByRole('button', { name: 'Capture photo' }));
+    await screen.findByText('1 page captured');
+    expect(appendPage).toHaveBeenCalledTimes(2);
   });
 
   it('stops every camera track when unmounted', async () => {
@@ -179,5 +251,24 @@ describe('CameraScreen', () => {
     await screen.findByText('1 page captured');
     await user.click(screen.getByRole('button', { name: 'Close camera' }));
     expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('does not update camera state after an external unmount during a pending save', async () => {
+    const saved = deferred<never>();
+    vi.mocked(appendPage).mockReturnValueOnce(saved.promise);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const user = userEvent.setup();
+    const { unmount } = render(<CameraScreen ebookId="ebook-1" onClose={vi.fn()} />);
+    await makeViewfinderReady();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Capture photo' })).toBeEnabled());
+
+    await user.click(screen.getByRole('button', { name: 'Capture photo' }));
+    await screen.findByText('Saving page…');
+    unmount();
+    saved.resolve(undefined as never);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(consoleError).not.toHaveBeenCalled();
   });
 });

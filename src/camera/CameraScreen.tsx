@@ -10,6 +10,7 @@ interface CameraScreenProps {
 }
 
 type CameraState = 'loading' | 'ready' | 'error';
+type StorageState = 'checking' | 'ready' | 'error';
 
 const CAMERA_CONSTRAINTS: MediaStreamConstraints = {
   audio: false,
@@ -47,28 +48,48 @@ function storageMessage(health: StorageHealth | null) {
 export function CameraScreen({ ebookId, onClose }: CameraScreenProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const mountedRef = useRef(false);
   const captureInProgressRef = useRef(false);
+  const captureOperationRef = useRef(0);
+  const storageOperationRef = useRef(0);
   const [cameraAttempt, setCameraAttempt] = useState(0);
   const [cameraState, setCameraState] = useState<CameraState>('loading');
   const [cameraError, setCameraError] = useState('');
   const [storageHealth, setStorageHealth] = useState<StorageHealth | null>(null);
+  const [storageState, setStorageState] = useState<StorageState>('checking');
+  const [storageError, setStorageError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [capturedCount, setCapturedCount] = useState(0);
 
   useEffect(() => {
-    let active = true;
-
-    async function checkStorage() {
-      const health = await getStorageHealth();
-      if (active) setStorageHealth(health);
-    }
-
-    void checkStorage();
+    mountedRef.current = true;
+    void refreshStorage();
     return () => {
-      active = false;
+      mountedRef.current = false;
+      captureOperationRef.current += 1;
+      storageOperationRef.current += 1;
     };
   }, []);
+
+  async function refreshStorage(): Promise<StorageHealth | null> {
+    const operation = ++storageOperationRef.current;
+    setStorageState('checking');
+    setStorageError('');
+    try {
+      const health = await getStorageHealth();
+      if (!mountedRef.current || storageOperationRef.current !== operation) return null;
+      setStorageHealth(health);
+      setStorageState('ready');
+      return health;
+    } catch {
+      if (!mountedRef.current || storageOperationRef.current !== operation) return null;
+      setStorageHealth(null);
+      setStorageState('error');
+      setStorageError('We could not check available iPad storage. Check device storage, then try again.');
+      return null;
+    }
+  }
 
   function handleViewfinderMetadata() {
     const video = videoRef.current;
@@ -115,36 +136,44 @@ export function CameraScreen({ ebookId, onClose }: CameraScreenProps) {
 
   async function handleCapture() {
     if (captureInProgressRef.current || !videoRef.current || cameraState !== 'ready') return;
+    const operation = ++captureOperationRef.current;
     captureInProgressRef.current = true;
     setIsSaving(true);
     setSaveError('');
     try {
-      const health = await getStorageHealth();
-      setStorageHealth(health);
+      const health = await refreshStorage();
+      if (!mountedRef.current || captureOperationRef.current !== operation || !health) return;
       if (health.level === 'critical') {
         setSaveError(storageMessage(health));
         return;
       }
 
-      const source = await captureFrame(videoRef.current);
+      const video = videoRef.current;
+      if (!video) return;
+      const source = await captureFrame(video);
       const asset = await processCapturedImage(source);
+      if (!mountedRef.current || captureOperationRef.current !== operation) return;
       await appendPage(ebookId, asset);
+      if (!mountedRef.current || captureOperationRef.current !== operation) return;
       setCapturedCount((count) => count + 1);
     } catch {
-      setSaveError('This photo could not be processed or saved. Try again; no page was added.');
+      if (mountedRef.current && captureOperationRef.current === operation) {
+        setSaveError('This photo could not be processed or saved. Try again; no page was added.');
+      }
     } finally {
       captureInProgressRef.current = false;
-      setIsSaving(false);
+      if (mountedRef.current && captureOperationRef.current === operation) setIsSaving(false);
     }
   }
 
   async function handleCheckStorage() {
-    setStorageHealth(await getStorageHealth());
+    setSaveError('');
+    await refreshStorage();
   }
 
-  const isCritical = storageHealth?.level === 'critical';
-  const captureDisabled = cameraState !== 'ready' || isSaving || isCritical;
-  const message = saveError || storageMessage(storageHealth);
+  const isCritical = storageState === 'ready' && storageHealth?.level === 'critical';
+  const captureDisabled = cameraState !== 'ready' || storageState !== 'ready' || isSaving || isCritical;
+  const message = storageError || saveError || storageMessage(storageHealth);
 
   return (
     <main className="app camera-screen">
@@ -168,7 +197,7 @@ export function CameraScreen({ ebookId, onClose }: CameraScreenProps) {
 
       {cameraState === 'loading' && <p aria-live="polite">Starting camera…</p>}
       {cameraError && <p role="alert">{cameraError}</p>}
-      {message && <p role={saveError || isCritical ? 'alert' : undefined} className="camera-message">{message}</p>}
+      {message && <p role={saveError || storageError || isCritical ? 'alert' : undefined} className="camera-message">{message}</p>}
 
       {cameraState === 'error' && (
         <button type="button" onClick={() => setCameraAttempt((attempt) => attempt + 1)}>
@@ -176,7 +205,7 @@ export function CameraScreen({ ebookId, onClose }: CameraScreenProps) {
         </button>
       )}
 
-      {isCritical && (
+      {(isCritical || storageState === 'error') && (
         <button type="button" onClick={() => void handleCheckStorage()} disabled={isSaving}>
           Check storage again
         </button>
