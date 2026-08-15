@@ -61,5 +61,15 @@ if it has not already been enabled.
 
 Desktop browser tests do not prove physical-iPad camera prompts, persistent
 storage grants, resource limits for a 100-page ebook, or Files/Books native
-sharing. Run all nine target-device acceptance checks in the design spec before
-claiming those behaviours are verified.
+sharing. Run the versioned [nine-item target-device acceptance checklist](docs/superpowers/specs/2026-08-14-ipad-photo-ebook-pwa-design.md#target-device-acceptance-tests)
+before claiming those behaviours are verified:
+
+1. Install from Safari and launch offline from the Home Screen.
+2. Create, close, and reopen an ebook without losing edits.
+3. Capture repeated photos and verify capture order.
+4. Reorder, rotate, delete, relaunch, and verify persistence.
+5. Build a representative 100-page ebook without crashes or unreadable text.
+6. Export and share to Files and Apple Books with visible progress.
+7. Cancel and interrupt exports without changing the editable ebook.
+8. Deny then restore camera permission and verify the guidance.
+9. Simulate low storage and verify warnings and atomic failed saves.

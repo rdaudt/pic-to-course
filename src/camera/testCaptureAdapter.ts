@@ -33,7 +33,7 @@ export function takeTestCaptureAsset(): PageAsset {
   remainingCaptures -= 1;
   captureNumber += 1;
   const image = new Blob([
-    `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900"><text y="48">Test page ${captureNumber}</text></svg>`,
+    `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900"><title>Test page ${captureNumber}</title><text y="48">Test page ${captureNumber}</text></svg>`,
   ], { type: 'image/svg+xml' });
 
   return {
