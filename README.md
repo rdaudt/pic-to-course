@@ -1,0 +1,65 @@
+# Photo Ebook
+
+Photo Ebook is an offline-first iPad web app for capturing photographs into an
+editable ebook and sharing a PDF. It stores ebooks only in this browser on this
+iPad—there are no accounts or cloud backups.
+
+The deployed app is available at <https://rdaudt.github.io/pic-to-course/>.
+
+## Install on an iPad
+
+1. Open the deployment URL in Safari while connected to the internet.
+2. Tap **Share**, then **Add to Home Screen**.
+3. Open **Photo Ebook** from the Home Screen once before going offline.
+
+After that first successful load, the app shell works offline. Ebooks and their
+photos are stored locally in the PWA, not in the service-worker cache.
+
+## Important local-data warning
+
+Editable ebooks exist only on this iPad. Clearing Safari website data, removing
+the PWA's stored website data, or resetting the device can permanently erase
+them. Export and save important PDFs through the share sheet; saved PDFs are
+not affected by deleting local app data.
+
+## Camera recovery
+
+The app needs Camera permission to capture pages. If access was denied, open
+**Settings** on the iPad, find the app (or Safari's website settings), allow
+Camera access, and return to the ebook. The capture screen also offers a retry
+when the camera is unavailable.
+
+## Offline and PDF sharing
+
+Create and organize ebooks after the first load without a network connection.
+Exports make a temporary PDF and offer the iPad share sheet for Files, Apple
+Books, AirDrop, and other installed destinations. If the browser cannot use
+native file sharing, the app offers a download instead. The app does not retain
+an internal copy of an exported PDF.
+
+## Development
+
+```sh
+npm ci
+npm run test:run
+npm run build
+npm run e2e
+npm run dev
+```
+
+`npm run e2e` builds a test-mode app with deterministic capture assets, starts a
+local preview server, and runs the browser workflow. Install its local browser
+once when needed with `npx playwright install chromium`.
+
+## Deployment
+
+Pushing to `main` runs tests and builds the app, then deploys `dist/` through
+GitHub Pages. Enable GitHub Pages in the repository's Actions deployment source
+if it has not already been enabled.
+
+## Physical-iPad validation still required
+
+Desktop browser tests do not prove physical-iPad camera prompts, persistent
+storage grants, resource limits for a 100-page ebook, or Files/Books native
+sharing. Run all nine target-device acceptance checks in the design spec before
+claiming those behaviours are verified.

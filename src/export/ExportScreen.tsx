@@ -44,20 +44,29 @@ async function shareOrDownload(pdf: Blob, title: string): Promise<'shared' | 'do
 
 export function ExportScreen({ ebookId, onClose }: ExportScreenProps) {
   const [progress, setProgress] = useState<PdfProgress | null>(null);
-  const [isExporting, setIsExporting] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<'shared' | 'downloaded' | null>(null);
   const [pdf, setPdf] = useState<Blob | null>(null);
   const abortController = useRef<AbortController | null>(null);
+  const sharingInProgress = useRef(false);
 
   useEffect(() => () => abortController.current?.abort(), []);
 
   async function shareExistingPdf(blob: Blob, title: string) {
+    if (sharingInProgress.current) return;
+    sharingInProgress.current = true;
     setError('');
+    setResult(null);
+    setIsSharing(true);
     try {
       setResult(await shareOrDownload(blob, title));
     } catch {
       setError('The PDF is ready, but sharing did not finish. Try again.');
+    } finally {
+      sharingInProgress.current = false;
+      setIsSharing(false);
     }
   }
 
@@ -68,7 +77,7 @@ export function ExportScreen({ ebookId, onClose }: ExportScreenProps) {
     setProgress(null);
     const controller = new AbortController();
     abortController.current = controller;
-    setIsExporting(true);
+    setIsGenerating(true);
     try {
       const ebook = await db.ebooks.get(ebookId);
       if (controller.signal.aborted) throw new DOMException('PDF export was cancelled.', 'AbortError');
@@ -83,6 +92,8 @@ export function ExportScreen({ ebookId, onClose }: ExportScreenProps) {
       const exportedPdf = await createPdf(ebook, { signal: controller.signal, onProgress: setProgress });
       if (controller.signal.aborted) throw new DOMException('PDF export was cancelled.', 'AbortError');
       setPdf(exportedPdf);
+      abortController.current = null;
+      setIsGenerating(false);
       await shareExistingPdf(exportedPdf, ebook.title);
     } catch (caught) {
       if ((caught as { name?: string }).name === 'AbortError') {
@@ -92,7 +103,7 @@ export function ExportScreen({ ebookId, onClose }: ExportScreenProps) {
       }
     } finally {
       if (abortController.current === controller) abortController.current = null;
-      setIsExporting(false);
+      setIsGenerating(false);
     }
   }
 
@@ -126,27 +137,28 @@ export function ExportScreen({ ebookId, onClose }: ExportScreenProps) {
           <h1>Create PDF</h1>
           <p>Pages are prepared one at a time in their current order.</p>
         </div>
-        <button type="button" onClick={close} disabled={isExporting}>Back to ebook editor</button>
+        <button type="button" onClick={close} disabled={isGenerating}>Back to ebook editor</button>
       </header>
 
-      {isExporting && (
+      {isGenerating && (
         <section aria-live="polite" aria-label="PDF creation progress">
           <p>{progress ? `Creating page ${progress.completed} of ${progress.total}…` : 'Preparing PDF…'}</p>
           <button type="button" onClick={cancelExport}>Cancel PDF creation</button>
         </section>
       )}
+      {isSharing && <p aria-live="polite">Sharing PDF…</p>}
       {error && <p role="alert">{error}</p>}
       {result && <p role="status">{result === 'shared' ? 'PDF shared.' : 'PDF download started.'}</p>}
 
       <nav className="export-actions" aria-label="PDF actions">
-        <button type="button" onClick={() => void startExport()} disabled={isExporting}>
+        <button type="button" onClick={() => void startExport()} disabled={isGenerating || isSharing}>
           {pdf ? 'Create another PDF' : 'Create PDF'}
         </button>
-        {pdf && !isExporting && (
-          <button type="button" onClick={() => void retryShare()}>Retry sharing</button>
+        {pdf && (
+          <button type="button" onClick={() => void retryShare()} disabled={isSharing}>Retry sharing</button>
         )}
-        {pdf && !isExporting && (
-          <button type="button" onClick={() => void downloadExistingPdf()}>Download PDF</button>
+        {pdf && (
+          <button type="button" onClick={() => void downloadExistingPdf()} disabled={isSharing}>Download PDF</button>
         )}
       </nav>
     </main>

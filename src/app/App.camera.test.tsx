@@ -3,6 +3,14 @@ import userEvent from '@testing-library/user-event';
 import { expect, it, vi } from 'vitest';
 import { App } from './App';
 
+vi.mock('virtual:pwa-register/react', () => ({
+  useRegisterSW: () => ({
+    needRefresh: [false, vi.fn()],
+    offlineReady: [false, vi.fn()],
+    updateServiceWorker: vi.fn(),
+  }),
+}));
+
 vi.mock('../library/LibraryScreen', () => ({
   LibraryScreen: ({ onOpen }: { onOpen: (ebookId: string) => void }) => (
     <button type="button" onClick={() => onOpen('ebook-1')}>Open mock ebook</button>

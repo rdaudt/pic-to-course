@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { appendPage, createEbook, db } from '../db/database';
+import * as storageHealth from '../storage/storageHealth';
 import { LibraryScreen } from './LibraryScreen';
 
 const asset = () => ({
@@ -97,6 +98,21 @@ describe('LibraryScreen', () => {
     await waitFor(() => expect(onOpen).toHaveBeenCalledTimes(1));
     const [ebookId] = onOpen.mock.calls[0];
     expect(await db.ebooks.get(ebookId)).toMatchObject({ title: 'Field Notes' });
+  });
+
+  it('requests persistent storage only after the user confirms ebook creation', async () => {
+    const requestPersistence = vi.spyOn(storageHealth, 'requestPersistentStorage').mockResolvedValue(true);
+    const user = userEvent.setup();
+    render(<LibraryScreen onOpen={vi.fn()} />);
+
+    expect(requestPersistence).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'New ebook' }));
+    expect(requestPersistence).not.toHaveBeenCalled();
+    const dialog = screen.getByRole('dialog', { name: 'Create ebook' });
+    await user.type(within(dialog).getByLabelText('Title'), 'Persistent book');
+    await user.click(within(dialog).getByRole('button', { name: 'Create ebook' }));
+
+    await waitFor(() => expect(requestPersistence).toHaveBeenCalledOnce());
   });
 
   it('shows newest ebooks first with first-page cover, page count, and edit date', async () => {

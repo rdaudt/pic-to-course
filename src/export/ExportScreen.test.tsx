@@ -103,6 +103,30 @@ describe('ExportScreen', () => {
     await waitFor(() => expect(createPdf).toHaveBeenCalled());
   });
 
+  it('clears stale sharing feedback and blocks a second retry while native sharing is pending', async () => {
+    const ebook = await seededEbook();
+    let finishShare: () => void = () => undefined;
+    const pendingShare = new Promise<void>((resolve) => { finishShare = resolve; });
+    Object.defineProperty(navigator, 'canShare', { configurable: true, value: vi.fn(() => true) });
+    Object.defineProperty(navigator, 'share', {
+      configurable: true,
+      value: vi.fn().mockResolvedValueOnce(undefined).mockReturnValueOnce(pendingShare),
+    });
+    const user = userEvent.setup();
+    render(<ExportScreen ebookId={ebook.id} onClose={vi.fn()} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Create PDF' }));
+    await screen.findByRole('status', { name: '' });
+    await user.click(screen.getByRole('button', { name: 'Retry sharing' }));
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry sharing' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Cancel PDF creation' })).not.toBeInTheDocument();
+
+    finishShare();
+    await screen.findByRole('status', { name: '' });
+  });
+
   it('sanitizes a user title for the shared file name', () => {
     expect(sanitizePdfFilename(' Notes: / first draft? ')).toBe('Notes_ _ first draft_.pdf');
     expect(sanitizePdfFilename('...')).toBe('ebook.pdf');

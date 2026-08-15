@@ -2,6 +2,7 @@ import { type FormEvent, type MouseEvent, type RefObject, useEffect, useRef, use
 import { SaveStatus, type SaveState } from '../app/SaveStatus';
 import { createEbook, db, deleteEbook, listEbooks, renameEbook } from '../db/database';
 import type { EbookRecord } from '../domain/models';
+import { requestPersistentStorage } from '../storage/storageHealth';
 
 interface LibraryScreenProps {
   onOpen: (id: string) => void;
@@ -188,6 +189,7 @@ export function LibraryScreen({ onOpen }: LibraryScreenProps) {
     }
 
     setCreateError('');
+    void requestPersistentStorage();
     setIsSaving(true);
     setSaveState('saving');
     try {

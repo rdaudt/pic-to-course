@@ -3,6 +3,7 @@ import { appendPage } from '../db/database';
 import { processCapturedImage } from '../image/processImage';
 import { getStorageHealth, type StorageHealth } from '../storage/storageHealth';
 import { captureFrame } from './captureFrame';
+import { installTestCaptureAdapter, isTestCaptureMode, takeTestCaptureAsset } from './testCaptureAdapter';
 
 interface CameraScreenProps {
   ebookId: string;
@@ -99,6 +100,12 @@ export function CameraScreen({ ebookId, onClose }: CameraScreenProps) {
   }
 
   useEffect(() => {
+    if (isTestCaptureMode) {
+      setCameraState('ready');
+      setCameraError('');
+      return installTestCaptureAdapter();
+    }
+
     let active = true;
     let requestedStream: MediaStream | null = null;
 
@@ -135,7 +142,7 @@ export function CameraScreen({ ebookId, onClose }: CameraScreenProps) {
   }, [cameraAttempt]);
 
   async function handleCapture() {
-    if (captureInProgressRef.current || !videoRef.current || cameraState !== 'ready') return;
+    if (captureInProgressRef.current || (!isTestCaptureMode && !videoRef.current) || cameraState !== 'ready') return;
     const operation = ++captureOperationRef.current;
     captureInProgressRef.current = true;
     setIsSaving(true);
@@ -148,10 +155,9 @@ export function CameraScreen({ ebookId, onClose }: CameraScreenProps) {
         return;
       }
 
-      const video = videoRef.current;
-      if (!video) return;
-      const source = await captureFrame(video);
-      const asset = await processCapturedImage(source);
+      const asset = isTestCaptureMode
+        ? takeTestCaptureAsset()
+        : await captureFromViewfinder(videoRef.current);
       if (!mountedRef.current || captureOperationRef.current !== operation) return;
       await appendPage(ebookId, asset);
       if (!mountedRef.current || captureOperationRef.current !== operation) return;
@@ -221,4 +227,9 @@ export function CameraScreen({ ebookId, onClose }: CameraScreenProps) {
       </button>
     </main>
   );
+}
+
+async function captureFromViewfinder(video: HTMLVideoElement | null) {
+  if (!video) throw new Error('Camera frame is not ready');
+  return processCapturedImage(await captureFrame(video));
 }
