@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { CameraScreen } from '../camera/CameraScreen';
 import { EditorScreen } from '../editor/EditorScreen';
+import { ExportScreen } from '../export/ExportScreen';
 import { LibraryScreen } from '../library/LibraryScreen';
 
 export type Route =
@@ -36,13 +37,5 @@ export function App() {
     );
   }
 
-  return (
-    <main className="app">
-      <h1>{route.screen}</h1>
-      <p>This screen will be available in a later update.</p>
-      <button type="button" onClick={() => setRoute({ screen: 'editor', ebookId: route.ebookId })}>
-        Back to ebook editor
-      </button>
-    </main>
-  );
+  return <ExportScreen ebookId={route.ebookId} onClose={() => setRoute({ screen: 'editor', ebookId: route.ebookId })} />;
 }

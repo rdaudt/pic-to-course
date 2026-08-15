@@ -263,6 +263,23 @@ dialog {
   gap: 1rem;
 }
 
+.export-screen {
+  max-width: 70rem;
+  margin-inline: auto;
+}
+
+.export-header,
+.export-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.export-header {
+  justify-content: space-between;
+}
+
 .camera-viewfinder {
   width: 100%;
   max-height: 68vh;
