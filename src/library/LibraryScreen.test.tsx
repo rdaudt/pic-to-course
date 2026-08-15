@@ -146,9 +146,25 @@ describe('LibraryScreen', () => {
 
     const cover = await screen.findByRole('img', { name: 'Cover for Rotated cover' });
     expect(cover).toHaveStyle({
-      transform: 'rotate(270deg) scale(0.75)',
+      width: '75%',
+      height: '75%',
+      transform: 'rotate(270deg)',
     });
     expect(cover.parentElement).toHaveClass('ebook-cover-viewport');
+  });
+
+  it('uses stored cover dimensions to fill the viewport after a portrait quarter turn', async () => {
+    const ebook = await createEbook('Portrait cover');
+    const page = await appendPage(ebook.id, { ...asset(), width: 900, height: 1200 });
+    await db.pages.update(page.id, { rotation: 90 });
+
+    render(<LibraryScreen onOpen={vi.fn()} />);
+
+    expect(await screen.findByRole('img', { name: 'Cover for Portrait cover' })).toHaveStyle({
+      width: '75%',
+      height: '133.333333%',
+      transform: 'rotate(90deg)',
+    });
   });
 
   it('revokes a cover URL when the screen closes while that cover is loading', async () => {

@@ -62,13 +62,13 @@ function pageGeometry(page: PageRecord) {
   let matrix: [number, number, number, number, number, number];
   switch (page.rotation) {
     case 90:
-      matrix = [0, imageWidth, -imageHeight, 0, imageHeight, 0];
+      matrix = [0, -imageWidth, imageHeight, 0, 0, imageWidth];
       break;
     case 180:
       matrix = [-imageWidth, 0, 0, -imageHeight, imageWidth, imageHeight];
       break;
     case 270:
-      matrix = [0, -imageWidth, imageHeight, 0, 0, imageWidth];
+      matrix = [0, imageWidth, -imageHeight, 0, imageHeight, 0];
       break;
     default:
       matrix = [imageWidth, 0, 0, imageHeight, 0, 0];

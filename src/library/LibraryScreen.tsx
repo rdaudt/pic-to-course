@@ -2,6 +2,7 @@ import { type FormEvent, type MouseEvent, type RefObject, useEffect, useRef, use
 import { SaveStatus, type SaveState } from '../app/SaveStatus';
 import { createEbook, db, deleteEbook, listEbooks, renameEbook } from '../db/database';
 import type { EbookRecord } from '../domain/models';
+import { previewLayout } from '../image/previewLayout';
 import { requestPersistentStorage } from '../storage/storageHealth';
 
 interface LibraryScreenProps {
@@ -13,6 +14,8 @@ interface LibraryItem {
   ebook: EbookRecord;
   coverUrl?: string;
   coverRotation?: 0 | 90 | 180 | 270;
+  coverWidth?: number;
+  coverHeight?: number;
 }
 
 const isBlank = (title: string) => !title.trim();
@@ -114,7 +117,13 @@ export function LibraryScreen({ onOpen, initialFocusEbookId }: LibraryScreenProp
               URL.revokeObjectURL(coverUrl);
               return { ebook };
             }
-            return { ebook, coverUrl, coverRotation: firstPage.rotation };
+            return {
+              ebook,
+              coverUrl,
+              coverRotation: firstPage.rotation,
+              coverWidth: firstPage.width,
+              coverHeight: firstPage.height,
+            };
           }),
         );
 
@@ -289,7 +298,7 @@ export function LibraryScreen({ onOpen, initialFocusEbookId }: LibraryScreenProp
 
       {items.length > 0 ? (
         <section className="ebook-grid" aria-label="Ebooks">
-          {items.map(({ ebook, coverUrl, coverRotation = 0 }) => (
+          {items.map(({ ebook, coverUrl, coverRotation = 0, coverWidth = 4, coverHeight = 3 }) => (
             <article className="ebook-card" key={ebook.id}>
               <div className="ebook-cover-viewport">
                 {coverUrl ? (
@@ -297,9 +306,7 @@ export function LibraryScreen({ onOpen, initialFocusEbookId }: LibraryScreenProp
                     className="ebook-cover"
                     src={coverUrl}
                     alt={`Cover for ${ebook.title}`}
-                    style={{
-                      transform: `rotate(${coverRotation}deg) scale(${coverRotation === 90 || coverRotation === 270 ? 0.75 : 1})`,
-                    }}
+                    style={previewLayout(coverWidth, coverHeight, coverRotation)}
                   />
                 ) : (
                   <div className="ebook-cover ebook-cover-empty" aria-hidden="true">No pages yet</div>

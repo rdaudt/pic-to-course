@@ -123,7 +123,9 @@ describe('EditorScreen', () => {
 
     await waitFor(async () => expect((await db.pages.get(first.id))?.rotation).toBe(90));
     expect(screen.getByRole('img', { name: 'Thumbnail for page 1' })).toHaveStyle({
-      transform: 'rotate(90deg) scale(0.75)',
+      width: '75%',
+      height: '75%',
+      transform: 'rotate(90deg)',
     });
   });
 

@@ -204,3 +204,58 @@ The production-hook source audit found the test API only in `src/camera/testCapt
 - Action SHAs were verified from the official remotes at the time above. Dependabot or a deliberate maintenance pass should update them when newer reviewed action commits are desired.
 
 No push, merge, deployment, or physical-device claim was made.
+
+## Final re-review addendum: rotation semantics and preview fitting
+
+Status: **DONE_WITH_CONCERNS**
+
+The final re-review identified that CSS `rotate(90deg)` is clockwise while the PDF 90-degree matrix mapped the image counterclockwise in PDF coordinates. The PDF 90/270 matrices are now corrected without changing their swapped natural page dimensions:
+
+- 90 degrees maps the source top-left corner to page top-right and source bottom-right to page bottom-left.
+- 270 degrees maps the source top-left corner to page bottom-left and source bottom-right to page top-right.
+- 0/180 transforms and page ordering remain unchanged.
+
+An asymmetric 40×30 JPEG fixture has red/green/blue/yellow corners and a right-pointing arrow. No independent PDF rasterizer was available in the environment: `pdftoppm`, `mutool`, ImageMagick, PyMuPDF, pdfjs, mupdf, and canvas were absent. Pillow was installed but cannot rasterize the PDF without a PDF backend. The regression therefore uses the strongest available independent coordinate validation rather than claiming raster proof: pdf-lib independently parses page geometry, the test independently parses the emitted content matrix, and a separate PDF image-coordinate mapper verifies all four named source corners land on the expected semantic page corners for 90 and 270 degrees. Physical/Safari PDF raster confirmation remains required.
+
+The fixed `scale(0.75)` preview workaround was also removed. `src/image/previewLayout.ts` now computes the unrotated image box from stored width/height, saved rotation, and the shared 4:3 preview viewport. Rotating that centered box preserves aspect ratio while maximizing fit. The library cover loader now carries first-page width and height as well as rotation; a portrait-page regression proves the rotated cover expands to the full landscape viewport instead of retaining the old undersized scale.
+
+RED/GREEN evidence:
+
+```text
+rtk proxy npm.cmd run test:run -- src/export/createPdf.test.ts src/image/previewLayout.test.ts src/editor/EditorScreen.test.tsx src/library/LibraryScreen.test.tsx
+RED: PDF semantic corner mapping failed; editor and two cover fitting assertions failed; preview layout behavior was absent
+GREEN: 4 files passed, 35 tests passed
+```
+
+Final verification after the re-review fixes:
+
+```text
+rtk proxy npm.cmd run test:run
+14 test files passed, 80 tests passed, 0 failed
+
+rtk proxy npm.cmd run build
+TypeScript and production Vite/PWA build passed
+
+rtk proxy npm.cmd run e2e
+3 passed, 0 failed
+
+rtk grep "__PHOTO_EBOOK_TEST__|setCaptureCount|Test page|image/svg\+xml" dist
+0 matches
+
+rtk grep "pdf-lib|PDFDocument" dist
+0 matches
+
+rtk git diff --check
+exit 0
+```
+
+Re-review files:
+
+- `src/export/createPdf.ts`
+- `src/export/createPdf.test.ts`
+- `src/image/previewLayout.ts`
+- `src/image/previewLayout.test.ts`
+- `src/editor/PageGrid.tsx`
+- `src/editor/EditorScreen.test.tsx`
+- `src/library/LibraryScreen.tsx`
+- `src/library/LibraryScreen.test.tsx`
